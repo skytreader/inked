@@ -1,0 +1,10 @@
+*.swp
+*~
+*.out
+*.log
+*.log.*
+*.bak
+*.bin
+*.gch
+bin/
+build/
