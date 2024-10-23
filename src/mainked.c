@@ -6,25 +6,42 @@
 
 struct termios orig_termios;
 
+void die(const char *s) {
+    perror(s);
+    exit(1);
+}
+
 void disableRawMode() {
-    tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios);
+    if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios) == -1) {
+        die("disableRawMode -> tcsetattr");
+    }
 }
 
 void enableRawMode() {
-    tcgetattr(STDIN_FILENO, &orig_termios);
+    if (tcgetattr(STDIN_FILENO, &orig_termios) == -1) {
+        die("enableRawMode -> tcgetattr");
+    }
     atexit(disableRawMode);
     struct termios raw = orig_termios;
     tcgetattr(STDIN_FILENO, &raw);
     /*
      * Flags turned _off_:
      *
+     * BRKINT[1] - Break conditions cause SIGINT (aka Ctrl-C).
+     *
      * ICRNL - allows Ctrl-M to be read as Carriage Return/New Line.
+     *
+     * INPCK[1] - parity checking.
+     *
+     * ISTRIP[1] - zeroes out the 8th bit of each byte (i.e., "strips" it).
      *
      * IXON - input transmission on. With this turned off, no data is
      * transmitted to the terminal at all. Ctrl-S triggers XOFF (pause
      * transmission) while Ctrl-Q triggers XON (resume transmission).
+     *
+     * [1] Traditional flags. Probably ignored by modern terminal emulators.
      */
-    raw.c_iflag &= ~(ICRNL | IXON);
+    raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
     /*
      * Flags turned _off_:
      *
@@ -34,6 +51,11 @@ void enableRawMode() {
      * manually issue an accompanying '\r'.
      */
     raw.c_oflag &= ~(OPOST);
+    /*
+     * CS8 is a bit mask. (Are we turning it on?). It sets the character size
+     * (CS) to 8 bits per byte. That is already mostly the default.
+     */
+    raw.c_cflag |= (CS8);
     /*
      * Flags turned _off_:
      *
@@ -51,19 +73,37 @@ void enableRawMode() {
      * (SIGINT) and Ctrl-Z (SIGSTOP).
      */
     raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
-    tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+
+    /*
+     * Set timeout for read().
+     *
+     * VMIN - minimum number of input bytes before read() can return.
+     *
+     * VTIME - maximum wait time before read() returns.
+     */
+    raw.c_cc[VMIN] = 0;
+    raw.c_cc[VTIME] = 1;
+    if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == -1) {
+        die("enableRawMode -> tcsetattr");
+    }
 }
 
 int main() {
     enableRawMode();
 
-    char c;
-    while (read(STDIN_FILENO, &c, 1) == 1 && c != 'q') {
+    while (1) {
+        char c = '\0';
+        // EAGAIN check mostly for Cygwin compatibility.
+        if (read(STDIN_FILENO, &c, 1) == -1 && errno != EAGAIN) {
+            die("main read");
+        }
         if (iscntrl(c)) {
             printf("control char: %d\n", c);
         } else {
             printf("normal char: %d ('%c')\n", c, c);
         }
+        if (c == 'q') break;
     }
+
     return 0;
 }
