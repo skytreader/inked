@@ -1,12 +1,23 @@
 #include <ctype.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <termios.h>
 #include <unistd.h>
 
+#define CTRL_KEY(k) ((k) & 0x1f)
+
 struct termios orig_termios;
 
+void cls() {
+    // Clear screen
+    write(STDOUT_FILENO, "\x1b[2J", 4);
+    // Position cursor to the top of screen
+    write(STDOUT_FILENO, "\x1b[H", 3);
+}
+
 void die(const char *s) {
+    cls();
     perror(s);
     exit(1);
 }
@@ -88,21 +99,52 @@ void enableRawMode() {
     }
 }
 
+char editorReadKey() {
+    int nread;
+    char c = '\0';
+    while ((nread = read(STDIN_FILENO, &c, 1)) != 1) {
+        // EAGAIN check mostly for Cygwin compatibility.
+        if (nread == -1 && errno != EAGAIN) {
+            die("editorReadKey -> read");
+        }
+    }
+
+    return c;
+}
+
+void editorProcessKeyPress() {
+    char c = editorReadKey();
+
+    switch (c) {
+        case CTRL_KEY('q'):
+            cls();
+            exit(0);
+            break;
+    }
+}
+
+/*
+ * Assuming that the screen has been previously refreshed, draw the UI.
+ */
+void editorDrows() {
+    int row;
+    for (row = 0; row < 24; row++) {
+        write(STDOUT_FILENO, "~\n\r", 3);
+    }
+}
+
+void editorRefreshScreen() {
+    cls();
+    editorDrows();
+    write(STDOUT_FILENO, "\x1b[H", 3);
+}
+
 int main() {
     enableRawMode();
 
     while (1) {
-        char c = '\0';
-        // EAGAIN check mostly for Cygwin compatibility.
-        if (read(STDIN_FILENO, &c, 1) == -1 && errno != EAGAIN) {
-            die("main read");
-        }
-        if (iscntrl(c)) {
-            printf("control char: %d\n", c);
-        } else {
-            printf("normal char: %d ('%c')\n", c, c);
-        }
-        if (c == 'q') break;
+        editorRefreshScreen();
+        editorProcessKeyPress();
     }
 
     return 0;
