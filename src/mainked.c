@@ -8,6 +8,33 @@
 
 #define CTRL_KEY(k) ((k) & 0x1f)
 
+/*
+ * Used to compensate for ioctl failures.
+ *
+ * 999 argument for C (cursor forward) and B (cursor down) are just 
+ * arbitrarily large values.
+ */
+#define CURSOR_MAX_MOVE "\x1b[999C\x1b[999B"
+
+/*
+ * `n` command (Device Status Report) returns status information. The argument
+ * 6 corresponds ot a query for cursor position. Reply can be read from standard
+ * input.
+ *
+ * Reply is as follows:
+ *
+ * 27       - The escape character
+ * 91 ('[') - sentinel token
+ * 53 ('5') -==============================================
+ * 53 ('5') -
+ * 59 (';') -
+ * 50 ('2') - Actual response (Cursor Position Report)
+ * 49 ('1') -
+ * 49 ('1') -
+ * 82 ('R') -==============================================
+ */
+#define QUERY_CURSOR_POSITION "\x1b[6n"
+
 typedef struct editorConfig {
     int rows;
     int cols;
@@ -29,12 +56,6 @@ void die(const char *s) {
     exit(1);
 }
 
-int getCursorPosition(int *rows, int *cols) {
-    if (write(STDOUT_FILENO, "\x1b[6n", 4) != 4) {
-        return -1;
-    }
-}
-
 char editorReadKey() {
     int nread;
     char c = '\0';
@@ -48,18 +69,45 @@ char editorReadKey() {
     return c;
 }
 
+int getCursorPosition(int *rows, int *cols) {
+    char buf[32];
+    unsigned int i = 0;
+    if (write(STDOUT_FILENO, QUERY_CURSOR_POSITION, 4) != 4) {
+        return -1;
+    }
+
+    while (i < sizeof(buf) - 1) {
+        if (read(STDIN_FILENO, &buf[i], 1) != 1) {
+            break;
+        }
+        if (buf[i] == 'R') {
+            break;
+        }
+        i++;
+    }
+    buf[i] = '\0';
+    
+    // Make sure it responded with an escape sequence.
+    if (buf[0] != '\x1b' || buf[1] != '[') {
+        return -1;
+    }
+
+    // Parse the results into the buffer
+    if (sscanf(&buf[2], "%d:%d", rows, cols) != 2) {
+        return -1;
+    }
+
+    return 0;
+}
+
 int getTerminalSize(int *rows, int *cols) {
     struct winsize ws;
     
     if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0 || ws.ws_row == 0) {
-        // Try to compensate for ioctl failure nonetheless
-        // 999 argument for C (cursor forward) and B (cursor down) are just 
-        // arbitrarily large values.
-        if (write(STDOUT_FILENO, "\x1b[999C\x1b[999B", 12) != 12) {
+        if (write(STDOUT_FILENO, CURSOR_MAX_MOVE, 12) != 12) {
             return -1;
         }
-        editorReadKey();
-        return -1;
+        return getCursorPosition(rows, cols);
     } else {
         *cols = ws.ws_col;
         *rows = ws.ws_row;
