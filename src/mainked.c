@@ -2,12 +2,19 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
 
 #define CTRL_KEY(k) ((k) & 0x1f)
 
-struct termios orig_termios;
+typedef struct editorConfig {
+    int rows;
+    int cols;
+    struct termios orig_termios;
+} inkedConfig;
+
+inkedConfig conf;
 
 void cls() {
     // Clear screen
@@ -22,19 +29,62 @@ void die(const char *s) {
     exit(1);
 }
 
+int getCursorPosition(int *rows, int *cols) {
+    if (write(STDOUT_FILENO, "\x1b[6n", 4) != 4) {
+        return -1;
+    }
+}
+
+char editorReadKey() {
+    int nread;
+    char c = '\0';
+    while ((nread = read(STDIN_FILENO, &c, 1)) != 1) {
+        // EAGAIN check mostly for Cygwin compatibility.
+        if (nread == -1 && errno != EAGAIN) {
+            die("editorReadKey -> read");
+        }
+    }
+
+    return c;
+}
+
+int getTerminalSize(int *rows, int *cols) {
+    struct winsize ws;
+    
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0 || ws.ws_row == 0) {
+        // Try to compensate for ioctl failure nonetheless
+        // 999 argument for C (cursor forward) and B (cursor down) are just 
+        // arbitrarily large values.
+        if (write(STDOUT_FILENO, "\x1b[999C\x1b[999B", 12) != 12) {
+            return -1;
+        }
+        editorReadKey();
+        return -1;
+    } else {
+        *cols = ws.ws_col;
+        *rows = ws.ws_row;
+        return 0;
+    }
+}
+
+void init() {
+    if (getTerminalSize(&conf.rows, &conf.cols) == -1) {
+        die("init -> getTerminalSize");
+    }
+}
+
 void disableRawMode() {
-    if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios) == -1) {
+    if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &conf.orig_termios) == -1) {
         die("disableRawMode -> tcsetattr");
     }
 }
 
 void enableRawMode() {
-    if (tcgetattr(STDIN_FILENO, &orig_termios) == -1) {
+    if (tcgetattr(STDIN_FILENO, &conf.orig_termios) == -1) {
         die("enableRawMode -> tcgetattr");
     }
     atexit(disableRawMode);
-    struct termios raw = orig_termios;
-    tcgetattr(STDIN_FILENO, &raw);
+    struct termios raw = conf.orig_termios;
     /*
      * Flags turned _off_:
      *
@@ -99,19 +149,6 @@ void enableRawMode() {
     }
 }
 
-char editorReadKey() {
-    int nread;
-    char c = '\0';
-    while ((nread = read(STDIN_FILENO, &c, 1)) != 1) {
-        // EAGAIN check mostly for Cygwin compatibility.
-        if (nread == -1 && errno != EAGAIN) {
-            die("editorReadKey -> read");
-        }
-    }
-
-    return c;
-}
-
 void editorProcessKeyPress() {
     char c = editorReadKey();
 
@@ -128,8 +165,13 @@ void editorProcessKeyPress() {
  */
 void editorDrows() {
     int row;
-    for (row = 0; row < 24; row++) {
-        write(STDOUT_FILENO, "~\n\r", 3);
+    for (row = 0; row < conf.rows; row++) {
+        write(STDOUT_FILENO, "~", 3);
+
+        if (row < conf.rows - 1) {
+            // Amazing: try printing newline before carriage return. Hmm...
+            write(STDOUT_FILENO, "\r\n", 2);
+        }
     }
 }
 
@@ -141,6 +183,7 @@ void editorRefreshScreen() {
 
 int main() {
     enableRawMode();
+    init();
 
     while (1) {
         editorRefreshScreen();
