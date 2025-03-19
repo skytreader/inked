@@ -6,6 +6,8 @@
 #include <termios.h>
 #include <unistd.h>
 
+#include "appbuff.h"
+
 #define CTRL_KEY(k) ((k) & 0x1f)
 
 /*
