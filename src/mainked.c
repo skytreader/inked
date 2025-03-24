@@ -8,6 +8,8 @@
 
 #include "appbuff.h"
 
+#define INKED_VERSION "0.1.0"
+
 #define CTRL_KEY(k) ((k) & 0x1f)
 
 /*
@@ -17,6 +19,7 @@
  * arbitrarily large values.
  */
 #define CURSOR_MAX_MOVE "\x1b[999C\x1b[999B"
+#define CURSOR_MOVE_TOP "\x1b[H"
 
 /*
  * `n` command (Device Status Report) returns status information. The argument
@@ -36,20 +39,34 @@
  * 82 ('R') -==============================================
  */
 #define QUERY_CURSOR_POSITION "\x1b[6n"
+#define CLEAR_SCREEN "\x1b[2J"
+#define CLEAR_LINE "\x1b[K"
 
-typedef struct editorConfig {
+#define CURSOR_HIDE "\x1b[?25l"
+#define CURSOR_SHOW "\x1b[?25h"
+
+typedef struct editorState {
+    int cursorRow;
+    int cursorCol;
+
     int rows;
     int cols;
     struct termios orig_termios;
-} inkedConfig;
+} inkedState;
 
-inkedConfig conf;
+inkedState conf;
 
+// TODO Delete this
 void cls() {
     // Clear screen
     write(STDOUT_FILENO, "\x1b[2J", 4);
     // Position cursor to the top of screen
-    write(STDOUT_FILENO, "\x1b[H", 3);
+    write(STDOUT_FILENO, CURSOR_MOVE_TOP, 3);
+}
+
+void clearBuffer(AppendBuffer *ab) {
+    ABAppend(ab, CLEAR_SCREEN, 4);
+    ABAppend(ab, CURSOR_MOVE_TOP, 3);
 }
 
 void die(const char *s) {
@@ -118,6 +135,9 @@ int getTerminalSize(int *rows, int *cols) {
 }
 
 void init() {
+    conf.cursorRow = 0;
+    conf.cursorCol = 0;
+
     if (getTerminalSize(&conf.rows, &conf.cols) == -1) {
         die("init -> getTerminalSize");
     }
@@ -213,22 +233,55 @@ void editorProcessKeyPress() {
 /*
  * Assuming that the screen has been previously refreshed, draw the UI.
  */
-void editorDrows() {
+void editorDrows(AppendBuffer *ab) {
     int row;
+    /*
+     * Poor-man's attempt to make the drawing responsive.
+     *
+     * This sort-of works but then you still need to press an arrow-key to make
+     * the editor "respond" to the terminal size change.
+     */
+    getTerminalSize(&conf.rows, &conf.cols);
     for (row = 0; row < conf.rows; row++) {
-        write(STDOUT_FILENO, "~", 3);
+        if (row == conf.rows / 3) {
+            char welcomeMsg[80];
+            int welcomelen = snprintf(welcomeMsg, sizeof(welcomeMsg), "Inked v.%s", INKED_VERSION);
+            if (welcomelen > conf.cols) {
+                welcomelen = conf.cols;
+            }
+
+            int padding = (conf.cols - welcomelen) / 2;
+            if (padding) {
+                ABAppend(ab, "~", 1);
+                padding--;
+            }
+            while (padding--) {
+                ABAppend(ab, " ", 1);
+            }
+            ABAppend(ab, welcomeMsg, welcomelen);
+        } else {
+            ABAppend(ab, "~", 1);
+        }
+        ABAppend(ab, CLEAR_LINE, 3);
 
         if (row < conf.rows - 1) {
             // Amazing: try printing newline before carriage return. Hmm...
-            write(STDOUT_FILENO, "\r\n", 2);
+            ABAppend(ab, "\r\n", 2);
         }
     }
 }
 
 void editorRefreshScreen() {
-    cls();
-    editorDrows();
-    write(STDOUT_FILENO, "\x1b[H", 3);
+    AppendBuffer ab = new_AppendBuffer;
+
+    ABAppend(&ab, CURSOR_HIDE, 6);
+    ABAppend(&ab, CURSOR_MOVE_TOP, 3);
+    editorDrows(&ab);
+    ABAppend(&ab, CURSOR_MOVE_TOP, 3);
+    ABAppend(&ab, CURSOR_SHOW, 6);
+
+    write(STDOUT_FILENO, ab.buffer, ab.len);
+    ABFree(&ab);
 }
 
 int main() {
