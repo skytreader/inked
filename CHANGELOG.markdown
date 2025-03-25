@@ -1,5 +1,12 @@
 # CHANGELOG - inked
 
+## v0.1.1
+
+- Scrollback issues from previous version are fixed. It still does not behave in
+  the way vim does though; everytime the program is ran, the terminal is
+  basically wiped.
+- Cursor is now moving.
+
 ## v0.1.0
 
 - Editor now attempts to be responsive (by getting the terminal size before

@@ -2,13 +2,14 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
 
 #include "appbuff.h"
 
-#define INKED_VERSION "0.1.0"
+#define INKED_VERSION "0.1.1"
 
 #define CTRL_KEY(k) ((k) & 0x1f)
 
@@ -41,9 +42,18 @@
 #define QUERY_CURSOR_POSITION "\x1b[6n"
 #define CLEAR_SCREEN "\x1b[2J"
 #define CLEAR_LINE "\x1b[K"
+/*
+ * Taken from the actual `clear` command.
+ */
+#define SUPER_CLEAR "\33[H\33[2J\33[3J"
 
 #define CURSOR_HIDE "\x1b[?25l"
 #define CURSOR_SHOW "\x1b[?25h"
+
+/*
+ * Format string that allows you to move the cursor to the given (row, col)
+ */
+#define CURSOR_MOVE "\x1b[%d;%dH"
 
 typedef struct editorState {
     int cursorRow;
@@ -56,12 +66,8 @@ typedef struct editorState {
 
 inkedState conf;
 
-// TODO Delete this
 void cls() {
-    // Clear screen
-    write(STDOUT_FILENO, "\x1b[2J", 4);
-    // Position cursor to the top of screen
-    write(STDOUT_FILENO, CURSOR_MOVE_TOP, 3);
+    write(STDOUT_FILENO, SUPER_CLEAR, 11);
 }
 
 void clearBuffer(AppendBuffer *ab) {
@@ -219,6 +225,23 @@ void enableRawMode() {
     }
 }
 
+void editorMoveCursor(char key) {
+    switch (key) {
+        case 'h':
+            conf.cursorCol--;
+            break;
+        case 'j':
+            conf.cursorRow++;
+            break;
+        case 'k':
+            conf.cursorRow--;
+            break;
+        case 'l':
+            conf.cursorCol++;
+            break;
+    }
+}
+
 void editorProcessKeyPress() {
     char c = editorReadKey();
 
@@ -227,7 +250,15 @@ void editorProcessKeyPress() {
             cls();
             exit(0);
             break;
+        case 'h':
+        case 'j':
+        case 'k':
+        case 'l':
+            editorMoveCursor(c);
+            break;
     }
+    printf("Processed key press %c\n\r", c);
+    printf("%d, %d\r\n", conf.cursorRow, conf.cursorCol);
 }
 
 /*
@@ -277,14 +308,18 @@ void editorRefreshScreen() {
     ABAppend(&ab, CURSOR_HIDE, 6);
     ABAppend(&ab, CURSOR_MOVE_TOP, 3);
     editorDrows(&ab);
-    ABAppend(&ab, CURSOR_MOVE_TOP, 3);
-    ABAppend(&ab, CURSOR_SHOW, 6);
 
+    char buf[32];
+    snprintf(buf, sizeof(buf), CURSOR_MOVE, conf.cursorRow + 1, conf.cursorCol + 1);
+    ABAppend(&ab, buf, strlen(buf));
+
+    ABAppend(&ab, CURSOR_SHOW, 6);
     write(STDOUT_FILENO, ab.buffer, ab.len);
     ABFree(&ab);
 }
 
 int main() {
+    cls();
     enableRawMode();
     init();
 
