@@ -13,6 +13,13 @@
 
 #define CTRL_KEY(k) ((k) & 0x1f)
 
+enum InkedterfaceKeys {
+    MOVE_UP = 'k',
+    MOVE_DOWN = 'j',
+    MOVE_LEFT = 'h',
+    MOVE_RIGHT = 'l'
+};
+
 /*
  * Used to compensate for ioctl failures.
  *
@@ -227,16 +234,16 @@ void enableRawMode() {
 
 void editorMoveCursor(char key) {
     switch (key) {
-        case 'h':
+        case MOVE_LEFT:
             conf.cursorCol--;
             break;
-        case 'j':
+        case MOVE_DOWN:
             conf.cursorRow++;
             break;
-        case 'k':
+        case MOVE_UP:
             conf.cursorRow--;
             break;
-        case 'l':
+        case MOVE_RIGHT:
             conf.cursorCol++;
             break;
     }
