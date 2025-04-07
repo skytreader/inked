@@ -1,5 +1,17 @@
 # CHANGELOG - inked
 
+## v0.1.2
+
+- **Introducing:** Command mode. Totally stealing this from vim.
+- You can now type into the editor during edit mode. Text wrapping, pagination,
+  deletion, and navigation not assured. Definitely do not resize the terminal
+  window.
+   - This is done via a text buffer data structure (at the moment, just a really
+   long array). This keeps tracks of other things about the text. Deletions
+   might be slow due to the nature of this data structure. Wonder what's a
+   better alternative?
+- Lots of admittedly-buggy behavior but, hey, it's a milestone!
+
 ## v0.1.1
 
 - Scrollback issues from previous version are fixed. It still does not behave in

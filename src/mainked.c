@@ -1,5 +1,6 @@
 #include <ctype.h>
 #include <errno.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,8 +9,9 @@
 #include <unistd.h>
 
 #include "appbuff.h"
+#include "textbuff.h"
 
-#define INKED_VERSION "0.1.1"
+#define INKED_VERSION "0.1.2"
 
 #define CTRL_KEY(k) ((k) & 0x1f)
 
@@ -19,6 +21,8 @@ enum InkedterfaceKeys {
     MOVE_LEFT = 'h',
     MOVE_RIGHT = 'l'
 };
+
+#define CTRL_CHAR '\x1b'
 
 /*
  * Used to compensate for ioctl failures.
@@ -69,6 +73,9 @@ typedef struct editorState {
     int rows;
     int cols;
     struct termios orig_termios;
+
+    bool inCommandMode;
+    TextBuffer textBuff;
 } inkedState;
 
 inkedState conf;
@@ -98,6 +105,19 @@ char editorReadKey() {
         }
     }
 
+    if (c == CTRL_CHAR) {
+        char seq[3];
+
+        if (read(STDIN_FILENO, &seq[0], 1) != 1) {
+            return c;
+        }
+        if (read(STDIN_FILENO, &seq[1], 1) != 1) {
+            return c;
+        }
+
+        // You can attempt to process succeeding codes here stored in the seq
+        // buffer. But for now we leave it.
+    }
     return c;
 }
 
@@ -150,6 +170,8 @@ int getTerminalSize(int *rows, int *cols) {
 void init() {
     conf.cursorRow = 0;
     conf.cursorCol = 0;
+    conf.inCommandMode = true;
+    conf.textBuff = (TextBuffer) new_TextBuffer;
 
     if (getTerminalSize(&conf.rows, &conf.cols) == -1) {
         die("init -> getTerminalSize");
@@ -252,17 +274,31 @@ void editorMoveCursor(char key) {
 void editorProcessKeyPress() {
     char c = editorReadKey();
 
-    switch (c) {
-        case CTRL_KEY('q'):
-            cls();
-            exit(0);
-            break;
-        case 'h':
-        case 'j':
-        case 'k':
-        case 'l':
-            editorMoveCursor(c);
-            break;
+    if (conf.inCommandMode) {
+        switch (c) {
+            case CTRL_KEY('q'):
+                cls();
+                exit(0);
+                break;
+            case 'h':
+            case 'j':
+            case 'k':
+            case 'l':
+                editorMoveCursor(c);
+                break;
+            case 'i':
+                conf.inCommandMode = false;
+                break;
+        }
+    } else {
+        switch (c) {
+            case CTRL_CHAR:
+                conf.inCommandMode = true;
+                break;
+            default:
+                // FIXME Ensure that this is a printable character?
+                TBAppend(&conf.textBuff, c);
+        }
     }
     printf("Processed key press %c\n\r", c);
     printf("%d, %d\r\n", conf.cursorRow, conf.cursorCol);
@@ -280,25 +316,29 @@ void editorDrows(AppendBuffer *ab) {
      * the editor "respond" to the terminal size change.
      */
     getTerminalSize(&conf.rows, &conf.cols);
-    for (row = 0; row < conf.rows; row++) {
-        if (row == conf.rows / 3) {
-            char welcomeMsg[80];
-            int welcomelen = snprintf(welcomeMsg, sizeof(welcomeMsg), "Inked v.%s", INKED_VERSION);
-            if (welcomelen > conf.cols) {
-                welcomelen = conf.cols;
-            }
+    ABAppend(ab, conf.textBuff.buffer, conf.textBuff.strLen);
+    row = conf.textBuff.newlineCount + 1;
+    for (; row < conf.rows; row++) {
+        if (conf.inCommandMode) {
+            if (row == conf.rows / 3) {
+                char welcomeMsg[80];
+                int welcomelen = snprintf(welcomeMsg, sizeof(welcomeMsg), "Inked v.%s", INKED_VERSION);
+                if (welcomelen > conf.cols) {
+                    welcomelen = conf.cols;
+                }
 
-            int padding = (conf.cols - welcomelen) / 2;
-            if (padding) {
+                int padding = (conf.cols - welcomelen) / 2;
+                if (padding) {
+                    ABAppend(ab, "~", 1);
+                    padding--;
+                }
+                while (padding--) {
+                    ABAppend(ab, " ", 1);
+                }
+                ABAppend(ab, welcomeMsg, welcomelen);
+            } else {
                 ABAppend(ab, "~", 1);
-                padding--;
             }
-            while (padding--) {
-                ABAppend(ab, " ", 1);
-            }
-            ABAppend(ab, welcomeMsg, welcomelen);
-        } else {
-            ABAppend(ab, "~", 1);
         }
         ABAppend(ab, CLEAR_LINE, 3);
 
