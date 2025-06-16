@@ -23,11 +23,7 @@ void TBAppend(TextBuffer *tb, char c) {
     // append the character into the buffer and update internal trackers
     tb->buffer[tb->strLen] = c;
     tb->buffer[tb->strLen + 1] = '\0';
-    if (tb->strLen == 0) {
-        tb->strLen = 2;
-    } else {
-        tb->strLen++;
-    }
+    tb->strLen++;
     if (c == '\n') {
         tb->newlineCount++;
     }
