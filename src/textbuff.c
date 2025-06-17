@@ -4,6 +4,9 @@
 #include "textbuff.h"
 
 void TBAppend(TextBuffer *tb, char c) {
+    if (c == '\0') {
+        return;
+    }
     // First make sure we have enough space in the buffer.
     if (tb->strLen == tb->bufferLen) {
         if (tb->bufferLen == 0) {
@@ -29,7 +32,7 @@ void TBAppend(TextBuffer *tb, char c) {
     }
 }
 
-void TBDelete(TextBuffer *tb, int index) {
+void TBDelete(TextBuffer *tb, unsigned int index) {
     if (tb->buffer[index] == '\n') {
         tb->newlineCount--;
     }
@@ -39,4 +42,19 @@ void TBDelete(TextBuffer *tb, int index) {
 
 void TBFree(TextBuffer *tb) {
     free(tb->buffer);
+}
+
+unsigned int tbStrLen(TextBuffer *tb, bool shouldUpdate) {
+    unsigned int count = 0;
+    for (; count < tb->bufferLen; count++) {
+        if (tb->buffer[count] == '\0') {
+            break;
+        }
+    }
+
+    if (shouldUpdate) {
+        tb->strLen = count;
+    }
+
+    return count;
 }

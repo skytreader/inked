@@ -1,28 +1,30 @@
+#include <stdbool.h>
+
 typedef struct tbuff {
     char *buffer;
     /*
      * Track how much memory we actually have allocated for this buffer.
      */
-    int bufferLen;
+    unsigned int bufferLen;
     /*
      * Track the current length of the string in the buffer. Invariants:
      *
-     * strLen <= bufferLen
+     * 0 <= strLen <= bufferLen
      */
-    int strLen;
+    unsigned int strLen;
     /*
      * Number of newlines in this buffer. Invariants:
      *
-     * newlineCount <= len
+     * 0 <= newlineCount <= len
      */
-    int newlineCount;
+    unsigned int newlineCount;
     /*
      * For pagination. Number of lines to _not_ display from the start of the
      * buffer. Invariants:
      *
-     * lineOffset <= newlineCount
+     * 0 <= lineOffset <= newlineCount
      */
-    int lineOffset;
+    unsigned int lineOffset;
 } TextBuffer;
 
 /*
@@ -40,5 +42,12 @@ void TBAppend(TextBuffer *tb, char c);
 /*
  * Deletes the character in the buffer at the given index.
  */
-void TBDelete(TextBuffer *tb, int index);
+void TBDelete(TextBuffer *tb, unsigned int index);
 void TBFree(TextBuffer *tb);
+/*
+ * Counts the length of the C-string in the text buffer. Flag shouldUpdate will
+ * update the internal strLen field if set to true.
+ *
+ * This is an O(n) operation. Use with caution.
+ */
+unsigned int tbStrLen(TextBuffer *tb, bool shouldUpdate);
