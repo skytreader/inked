@@ -33,6 +33,9 @@ void TBAppend(TextBuffer *tb, char c) {
 }
 
 void TBDelete(TextBuffer *tb, unsigned int index) {
+    if (tb->buffer[index] == '\0') {
+        return;
+    }
     if (tb->buffer[index] == '\n') {
         tb->newlineCount--;
     }

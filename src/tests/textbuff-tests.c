@@ -19,6 +19,68 @@ Test(textBuffer, addNullChar) {
     cr_assert(eq(uint, textBuff.strLen, 0));
 }
 
+Test(textBuffer, deleteMiddle) {
+    TextBuffer textBuff = (TextBuffer) new_TextBuffer;
+    TBAppend(&textBuff, 'a');
+    TBAppend(&textBuff, 'b');
+    TBAppend(&textBuff, 'c');
+    cr_assert(eq(uint, 3, textBuff.strLen));
+    cr_assert(eq(chr, 'a', textBuff.buffer[0]));
+    cr_assert(eq(chr, 'b', textBuff.buffer[1]));
+    cr_assert(eq(chr, 'c', textBuff.buffer[2]));
+    TBDelete(&textBuff, 1);
+    cr_assert(eq(uint, 2, textBuff.strLen));
+    cr_assert(eq(chr, 'a', textBuff.buffer[0]));
+    cr_assert(eq(chr, 'c', textBuff.buffer[1]));
+}
+
+Test(textBuffer, deleteStart) {
+    TextBuffer textBuff = (TextBuffer) new_TextBuffer;
+    TBAppend(&textBuff, 'a');
+    TBAppend(&textBuff, 'b');
+    TBAppend(&textBuff, 'c');
+    cr_assert(eq(uint, 3, textBuff.strLen));
+    cr_assert(eq(chr, 'a', textBuff.buffer[0]));
+    cr_assert(eq(chr, 'b', textBuff.buffer[1]));
+    cr_assert(eq(chr, 'c', textBuff.buffer[2]));
+    TBDelete(&textBuff, 0);
+    cr_assert(eq(uint, 2, textBuff.strLen));
+    cr_assert(eq(chr, 'b', textBuff.buffer[0]));
+    cr_assert(eq(chr, 'c', textBuff.buffer[1]));
+}
+
+Test(textBuffer, deleteEnd) {
+    TextBuffer textBuff = (TextBuffer) new_TextBuffer;
+    TBAppend(&textBuff, 'a');
+    TBAppend(&textBuff, 'b');
+    TBAppend(&textBuff, 'c');
+    cr_assert(eq(uint, 3, textBuff.strLen));
+    cr_assert(eq(chr, 'a', textBuff.buffer[0]));
+    cr_assert(eq(chr, 'b', textBuff.buffer[1]));
+    cr_assert(eq(chr, 'c', textBuff.buffer[2]));
+    TBDelete(&textBuff, 2);
+    cr_assert(eq(uint, 2, textBuff.strLen));
+    cr_assert(eq(chr, 'a', textBuff.buffer[0]));
+    cr_assert(eq(chr, 'b', textBuff.buffer[1]));
+}
+
+Test(textBuffer, deleteBeyondBuffer) {
+    TextBuffer textBuff = (TextBuffer) new_TextBuffer;
+    TBAppend(&textBuff, 'a');
+    TBAppend(&textBuff, 'b');
+    TBAppend(&textBuff, 'c');
+    cr_assert(eq(uint, 3, textBuff.strLen));
+    cr_assert(ge(uint, 4, textBuff.bufferLen));
+    cr_assert(eq(chr, 'a', textBuff.buffer[0]));
+    cr_assert(eq(chr, 'b', textBuff.buffer[1]));
+    cr_assert(eq(chr, 'c', textBuff.buffer[2]));
+    TBDelete(&textBuff, 3);
+    cr_assert(eq(uint, 3, textBuff.strLen));
+    cr_assert(eq(chr, 'a', textBuff.buffer[0]));
+    cr_assert(eq(chr, 'b', textBuff.buffer[1]));
+    cr_assert(eq(chr, 'c', textBuff.buffer[2]));
+}
+
 Test(textBuffer, tbStrLen) {
     TextBuffer textBuff = (TextBuffer) new_TextBuffer;
     cr_assert(zero(tbStrLen(&textBuff, false)));
